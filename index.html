@@ -162,6 +162,15 @@ main{padding:0 14px}
 .f textarea{min-height:68px;resize:vertical}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .days{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.palette{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;max-width:290px}
+.palette button{aspect-ratio:1;border-radius:50%;background:var(--c);border:3px solid var(--surface);box-shadow:0 0 0 1px var(--line);position:relative}
+.palette button.on{box-shadow:0 0 0 2.5px var(--text)}
+.palette button.on::after{content:'';position:absolute;left:50%;top:46%;width:7px;height:13px;border:solid #fff;border-width:0 3px 3px 0;transform:translate(-50%,-50%) rotate(45deg)}
+[id^="cat-"]{scroll-margin-top:84px}
+.gh{display:flex;justify-content:space-between;align-items:baseline;padding:13px 16px 11px;background:var(--surface2);border-bottom:1px solid var(--line)}
+.gh b{font-size:16px;font-weight:800}
+.gh small{color:var(--muted);font-size:13px;font-weight:600;margin-left:6px}
+.gh span:last-child{font-weight:800;font-variant-numeric:tabular-nums}
 .days button,.seg button{padding:11px 0;border-radius:11px;border:1px solid var(--line);background:var(--surface2);font-weight:700;text-align:center}
 .days button.on,.seg button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .seg{display:flex;gap:6px}
@@ -244,9 +253,11 @@ function save(){if(!writeLS(KEY,JSON.stringify(db)))toast('이 화면에서는 �
 /* ===== 도구 ===== */
 const DAYS=['월','화','수','목','금','토','일'];
 const COLORS=['#2f8f6f','#d0613c','#3f63c7','#c79a1e','#8a55b3','#cf4b7a','#2a93ad','#6f7d2c'];
+/* 수업 등록 때 고르는 10색 (앞 8색은 기존 자동 색과 같음) */
+const PALETTE=[...COLORS,'#6b6fd6','#9c6b4e'];
 const CARD_COLORS=['#2b3f8f','#1d6b5a','#7a2f4d','#3d3d48','#8a5a12','#4b2f8a'];
 const CATS=['수강료','교재비','특강비','셔틀비','시험비','기타'];
-const ui={tab:'home',ym:'',payFilter:'전체',statYm:'',statAll:false,weekSoon:false};
+const ui={tab:'home',ym:'',payFilter:'전체',payGroup:'cat',statYm:'',statAll:false,weekSoon:false};
 const $=id=>document.getElementById(id);
 const pad=n=>String(n).padStart(2,'0');
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
@@ -301,6 +312,8 @@ const stClass={'수강 중':'','종료 예정':'wait','수강 예정':'wait','�
 function isRunning(a){const s=stOf(a);return s==='수강 중'||s==='종료 예정'}
 
 /* ===== 홈 ===== */
+function paysOfAc(a,ym){return db.payments.filter(p=>(p.academyId===a.id||(!p.academyId&&p.academy===a.name))&&p.status!=='취소'&&p.date?.startsWith(ym))}
+function catSums(list){const m={};list.forEach(p=>{const k=p.category||'기타';m[k]=(m[k]||0)+(+p.amount||0)});return Object.entries(m).sort((x,y)=>CATS.indexOf(x[0])-CATS.indexOf(y[0]))}
 function acItem(a){
   const s=stOf(a);
   let period=(a.startDate?dotDate(a.startDate):'시작일 미입력')+' ~ '+(a.endDate?dotDate(a.endDate):'종료일 미정');
@@ -315,6 +328,7 @@ function acItem(a){
       <dt>수업</dt><dd>${d.length?d.join(' '):'요일 미정'}${validTime(a.start)?' &nbsp;'+a.start+'~'+a.end:''}</dd>
       <dt>기간</dt><dd>${period}</dd>${extra}
       <dt>수강료</dt><dd>월 ${won(a.fee)}</dd>
+      ${(()=>{const cs=catSums(paysOfAc(a,month()));return cs.length?`<dt>이번 달</dt><dd>${cs.map(([k,v])=>esc(k)+' '+won(v)).join('<br>')}</dd>`:''})()}
     </dl></button>`;
 }
 function payItem(p){
@@ -345,7 +359,9 @@ function vHome(){
   const monthly=running.reduce((s,a)=>s+(+a.fee||0),0);
   h+=`<div class="sec">신청 내역 전체 <small>다니는 곳 월 ${won(monthly)}</small></div>`;
   h+=`<div class="box">${sorted.length?sorted.map(acItem).join(''):'<div class="empty">아직 신청한 수업이 없어요.<br>오른쪽 위 <b>+ 추가</b>에서 수업을 등록하세요.</div>'}</div>`;
-  const next=db.payments.filter(p=>p.status==='예정').sort((a,b)=>a.date.localeCompare(b.date)).slice(0,5);
+  const MP=P.filter(p=>p.status!=='취소'),cs=catSums(MP);
+  h+=`<div class="sec">이번 달 결제 <small>종류별</small></div><div class="box">${cs.length?cs.map(([k,v])=>{const L=MP.filter(p=>(p.category||'기타')===k),pe=L.filter(p=>p.status==='예정').length;return `<button class="row" style="width:100%" data-act="goPay" data-cat="${esc(k)}"><span class="grow">${esc(k)}<small style="display:block;font-weight:500;color:var(--muted);font-size:13.5px">${L.length}건${pe?', 낼 예정 '+pe+'건':''}</small></span><span class="v">${won(v)}</span><span style="color:var(--faint)">›</span></button>`}).join('')+`<div class="total" style="border-top:1px solid var(--line)"><span>합계</span><b>${won(sumAmt(MP))}</b></div>`:'<div class="empty">이번 달 결제 기록이 없어요.</div>'}</div>`;
+  const next=db.payments.filter(p=>p.status==='예정').sort((a,b)=>a.date.localeCompare(b.date)).slice(0,8);
   h+=`<div class="sec">낼 돈 <small>결제 예정 ${db.payments.filter(p=>p.status==='예정').length}건</small></div>`;
   h+=`<div class="box">${next.length?next.map(payItem).join(''):'<div class="empty">예정된 결제가 없어요.</div>'}</div>`;
   return h;
@@ -415,7 +431,14 @@ function vPay(){
   h+=`<div class="chips">${['전체','예정','확정','취소'].map(s=>`<button class="${ui.payFilter===s?'on':''}" data-act="payFilter" data-v="${s}">${s==='확정'?'결제 완료':s} ${s==='전체'?all.length:all.filter(p=>p.status===s).length}</button>`).join('')}</div>`;
   const conf=sumAmt(all.filter(p=>p.status==='확정')),pend=sumAmt(all.filter(p=>p.status==='예정')),ref=all.filter(p=>p.status==='취소').reduce((s,p)=>s+(+p.refund||0),0);
   h+=`<div class="box"><div class="total"><span>낸 돈</span><b>${won(conf)}</b></div><div class="total" style="border-top:1px solid var(--line)"><span>낼 예정</span><b>${won(pend)}</b></div>${ref?`<div class="total" style="border-top:1px solid var(--line)"><span>환불 받은 돈</span><b>${won(ref)}</b></div>`:''}</div>`;
-  h+=`<div class="box">${P.length?P.map(payItem).join(''):'<div class="empty">이 달에는 결제 기록이 없어요.</div>'}</div>`;
+  h+=`<div class="chips"><button class="${ui.payGroup==='cat'?'on':''}" data-act="payGroup" data-v="cat">종류별로 보기</button><button class="${ui.payGroup==='date'?'on':''}" data-act="payGroup" data-v="date">날짜순으로 보기</button></div>`;
+  if(!P.length) h+=`<div class="box"><div class="empty">이 달에는 결제 기록이 없어요.</div></div>`;
+  else if(ui.payGroup==='date') h+=`<div class="box">${P.map(payItem).join('')}</div>`;
+  else{
+    const keys=[...new Set(P.map(p=>p.category||'기타'))].sort((x,y)=>(CATS.indexOf(x)+99)%99-(CATS.indexOf(y)+99)%99);
+    keys.forEach(k=>{const L=P.filter(p=>(p.category||'기타')===k),live=L.filter(p=>p.status!=='취소');
+      h+=`<div class="box" id="cat-${esc(k)}"><div class="gh"><span><b>${esc(k)}</b><small>${L.length}건</small></span><span>${won(sumAmt(live))}</span></div>${L.map(payItem).join('')}</div>`;});
+  }
   h+=`<button class="ghost" data-act="newPay">+ 결제 등록</button>`;
   return h;
 }
@@ -517,12 +540,16 @@ function sheetAdd(){
 }
 
 let editId='';
+let curColor='';
 function sheetAc(id){
   editId=id;
   const a=db.academies.find(x=>x.id===id)||{name:'',subject:'',teacher:'',days:'',start:'16:00',end:'17:00',fee:'',note:'',startDate:today(),endDate:''};
   const ds=dayList(a);
+  if(id) curColor=acColor(a);
+  else{const used=db.academies.map(acColor);curColor=PALETTE.find(c=>!used.includes(c))||PALETTE[db.academies.length%PALETTE.length]}
   openSheet(`<h2>${id?'수업 정보':'수업 등록'}${X}</h2>
     ${fld('학원 이름',`<input id="f_name" value="${esc(a.name)}">`)}
+    ${fld('색상',`<div class="palette">${PALETTE.map(c=>`<button type="button" data-act="pickColor" data-c="${c}" class="${c===curColor?'on':''}" style="--c:${c}" aria-label="색상 선택"></button>`).join('')}</div>`)}
     <div class="two">${fld('과목',`<input id="f_subject" value="${esc(a.subject)}" placeholder="예: 수학">`)}${fld('선생님',`<input id="f_teacher" value="${esc(a.teacher)}" placeholder="선택">`)}</div>
     ${fld('수업 요일',`<div class="days">${DAYS.map(d=>`<button type="button" data-act="toggleDay" class="${ds.includes(d)?'on':''}" data-d="${d}">${d}</button>`).join('')}</div>`)}
     <div class="two">${fld('시작 시간',timePick('t_start',a.start||'16:00'))}${fld('끝나는 시간',timePick('t_end',a.end||'17:00'))}</div>
@@ -602,11 +629,14 @@ const A={
   statPrev:()=>{ui.statAll=false;ui.statYm=shiftYm(ui.statYm,-1);render()}, statNext:()=>{ui.statAll=false;ui.statYm=shiftYm(ui.statYm,1);render()},
   statMode:d=>{ui.statAll=d.v==='all';render()},
   payFilter:d=>{ui.payFilter=d.v;render()},
+  payGroup:d=>{ui.payGroup=d.v;render()},
+  goPay:d=>{ui.tab='pay';ui.ym=month();ui.payFilter='전체';ui.payGroup='cat';render();const el=document.getElementById('cat-'+d.cat);if(el)el.scrollIntoView({block:'start'});else window.scrollTo(0,0)},
   weekSoon:d=>{ui.weekSoon=d.v==='1';render()},
   newAc:()=>sheetAc(''), editAc:d=>sheetAc(d.id),
   newPay:()=>sheetPay(''), editPay:d=>sheetPay(d.id),
   newCard:()=>sheetCard(''), editCard:d=>sheetCard(d.id),
   toggleDay:(d,el)=>el.classList.toggle('on'),
+  pickColor:(d,el)=>{curColor=d.c;el.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===el))},
   seg:(d,el)=>{el.parentNode.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===el));payVis()},
   markPaid:d=>{const p=db.payments.find(x=>x.id===d.id);p.status='확정';if(p.date>today())p.date=today();save();toast('결제 완료로 바꿨어요')},
   payForAc:d=>{const a=db.academies.find(x=>x.id===d.id);sheetPay('',{academyId:a.id,academy:a.name,amount:a.fee,category:'수강료',status:'예정',note:(new Date().getMonth()+1)+'월 수강료'})},
@@ -619,7 +649,7 @@ const A={
     if(sd&&ed&&ed<sd){toast('종료일이 시작일보다 빨라요');return}
     const data={name,subject:$('f_subject').value.trim(),teacher:$('f_teacher').value.trim(),
       days:[...document.querySelectorAll('.days button.on')].map(b=>b.dataset.d).join(','),
-      start,end,startDate:sd,endDate:ed,fee:Number($('f_fee').value)||0,note:$('f_note').value.trim()};
+      start,end,startDate:sd,endDate:ed,color:curColor,fee:Number($('f_fee').value)||0,note:$('f_note').value.trim()};
     if(editId){const i=db.academies.findIndex(x=>x.id===editId);db.academies[i]={...db.academies[i],...data};db.academies[i].status=stOf(db.academies[i])}
     else{const a={id:uid(),...data};a.status=stOf(a);db.academies.push(a)}
     commit('저장했어요');

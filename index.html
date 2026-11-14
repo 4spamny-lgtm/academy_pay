@@ -240,7 +240,7 @@ const DAYS=['월','화','수','목','금','토','일'];
 const COLORS=['#2f8f6f','#d0613c','#3f63c7','#c79a1e','#8a55b3','#cf4b7a','#2a93ad','#6f7d2c'];
 const CARD_COLORS=['#2b3f8f','#1d6b5a','#7a2f4d','#3d3d48','#8a5a12','#4b2f8a'];
 const CATS=['수강료','교재비','특강비','셔틀비','시험비','기타'];
-const ui={tab:'home',ym:'',payFilter:'전체',statYm:'',statAll:false};
+const ui={tab:'home',ym:'',payFilter:'전체',statYm:'',statAll:false,weekSoon:false};
 const $=id=>document.getElementById(id);
 const pad=n=>String(n).padStart(2,'0');
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
@@ -260,7 +260,19 @@ const sumAmt=a=>a.reduce((s,x)=>s+(+x.amount||0),0);
 const lastDay=ym=>{const [y,m]=ym.split('-').map(Number);return new Date(y,m,0).getDate()};
 const shiftYm=(ym,k)=>{const [y,m]=ym.split('-').map(Number);const d=new Date(y,m-1+k,1);return d.getFullYear()+'-'+pad(d.getMonth()+1)};
 const ymLabel=ym=>{const [y,m]=ym.split('-');return y+'년 '+Number(m)+'월'};
-const dayList=a=>(a.days||'').split(',').map(s=>s.trim()).filter(d=>DAYS.includes(d));
+/* 요일은 '월,수,금' '월수금' '월 수 금' '월요일, 수요일' 모두 알아봄 */
+const dayList=a=>{const s=String(a.days||'').replace(/요일/g,'');return DAYS.filter(d=>s.includes(d))};
+/* 시간은 '17:00' '5:30' '17시 30분' '1730' '오후 5시' 모두 알아봄 */
+function normTime(t){
+  t=String(t||'').trim();if(!t)return '';
+  const pm=/오후|pm/i.test(t),am=/오전|am/i.test(t);
+  let h,mi;const m=t.match(/(\d{1,2})\s*[:시.]\s*(\d{1,2})?/);
+  if(m){h=+m[1];mi=+(m[2]||0)}
+  else{const d=t.replace(/\D/g,'');if(d.length===3||d.length===4){h=+d.slice(0,-2);mi=+d.slice(-2)}else if(d.length&&d.length<=2){h=+d;mi=0}else return t}
+  if(pm&&h<12)h+=12;if(am&&h===12)h=0;
+  if(h>23||mi>59)return t;
+  return pad(h)+':'+pad(mi);
+}
 function hashColor(id,list=COLORS){let h=0;for(const c of String(id))h=(h*31+c.charCodeAt(0))>>>0;return list[h%list.length]}
 function acColor(a){return a.color||hashColor(a.id)}
 function cardOf(id){return db.cards.find(c=>c.id===id)}
@@ -334,13 +346,26 @@ function vHome(){
 }
 
 /* ===== 시간표 ===== */
+function weekReason(a){
+  const s=stOf(a);
+  if(s==='수강 종료') return a.endDate?dotDate(a.endDate)+'에 수업이 끝났어요':'수강 종료로 되어 있어요';
+  if(s==='수강 예정'&&!ui.weekSoon) return a.startDate?dotDate(a.startDate)+'부터 시작이라 아직 안 나와요':'수강 예정으로 되어 있어요';
+  if(!dayList(a).length) return '수업 요일이 없어요';
+  if(!validTime(a.start)||!validTime(a.end)) return '수업 시간이 없어요';
+  if(toMin(a.end)<=toMin(a.start)) return '끝나는 시간이 시작 시간보다 빨라요';
+  return '';
+}
 function vWeek(){
   const items=[];
-  db.academies.filter(isRunning).forEach(a=>{
-    if(!validTime(a.start)||!validTime(a.end)||toMin(a.end)<=toMin(a.start)) return;
+  db.academies.forEach(a=>{
+    if(weekReason(a)) return;
     dayList(a).forEach(d=>items.push({a,day:DAYS.indexOf(d),s:toMin(a.start),e:toMin(a.end)}));
   });
-  if(!items.length) return `<div class="box"><div class="empty">지금 다니는 수업 중에 요일과 시간이 입력된 수업이 없어요.<br>수업을 눌러 요일과 시간을 넣어 주세요.</div></div>`;
+  const soonCount=db.academies.filter(a=>stOf(a)==='수강 예정').length;
+  const toggle=soonCount?`<div class="chips"><button class="${!ui.weekSoon?'on':''}" data-act="weekSoon" data-v="0">지금 다니는 수업</button><button class="${ui.weekSoon?'on':''}" data-act="weekSoon" data-v="1">시작 전 수업도 보기 ${soonCount}</button></div>`:'';
+  const hidden=db.academies.filter(a=>weekReason(a)&&stOf(a)!=='수강 종료');
+  const hiddenBox=hidden.length?`<div class="sec">시간표에 안 나온 수업 <small>눌러서 고치기</small></div><div class="box">${hidden.map(a=>`<button class="row" style="width:100%" data-act="editAc" data-id="${a.id}"><span class="dot" style="--c:${acColor(a)}"></span><span class="grow">${esc(a.name)}<small style="display:block;font-weight:500;color:var(--danger);font-size:13.5px">${weekReason(a)}</small></span><span style="color:var(--faint)">›</span></button>`).join('')}</div>`:'';
+  if(!items.length) return toggle+`<div class="box"><div class="empty">${db.academies.length?'시간표에 넣을 수 있는 수업이 없어요. 아래에서 이유를 확인해 주세요.':'아직 등록한 수업이 없어요.<br>오른쪽 위 <b>+ 추가</b>에서 수업을 등록하세요.'}</div></div>`+hiddenBox;
   const minH=Math.floor(Math.min(...items.map(i=>i.s))/60),maxH=Math.ceil(Math.max(...items.map(i=>i.e))/60);
   const H=56,height=(maxH-minH)*H,ti=(new Date().getDay()+6)%7;
   let time=`<div class="tt-time" style="height:${height}px">`;
@@ -354,7 +379,7 @@ function vWeek(){
     cols+=`<div class="tt-col ${d===ti?'today':''}" style="height:${height}px;--h:${H}px">`+its.map(i=>
       `<button class="blk" data-act="editAc" data-id="${i.a.id}" style="--c:${acColor(i.a)};top:${(i.s-minH*60)/60*H+1}px;height:${(i.e-i.s)/60*H-2}px;left:${i.lane/n*100}%;width:calc(${100/n}% - 1px)"><b>${esc(i.a.subject||i.a.name)}</b><span>${i.a.start}</span></button>`).join('')+'</div>';
   }
-  let h=`<div class="tt"><div class="tt-head"><div></div>${DAYS.map((d,i)=>`<div class="${i===ti?'today':''}">${d}</div>`).join('')}</div><div class="tt-body">${time}${cols}</div></div>`;
+  let h=toggle+`<div class="tt"><div class="tt-head"><div></div>${DAYS.map((d,i)=>`<div class="${i===ti?'today':''}">${d}</div>`).join('')}</div><div class="tt-body">${time}${cols}</div></div>`;
   h+=`<div class="sec">요일별 일정</div><div class="box">`;
   for(let d=0;d<7;d++){
     const its=items.filter(i=>i.day===d).sort((x,y)=>x.s-y.s);
@@ -366,9 +391,7 @@ function vWeek(){
   const tot=Object.values(mins).reduce((a,b)=>a+b,0);
   h+=`<div class="sec">일주일 수업 시간 <small>총 ${durText(tot)}</small></div><div class="box">`+
     Object.entries(mins).map(([id,m])=>{const a=db.academies.find(x=>x.id===id);return `<div class="row"><span class="dot" style="--c:${acColor(a)}"></span><span class="grow">${esc(a.name)}</span><span class="v">${durText(m)}</span></div>`}).join('')+'</div>';
-  const soon=db.academies.filter(a=>stOf(a)==='수강 예정');
-  if(soon.length) h+=`<p class="empty" style="padding:4px 10px 0;font-size:14px">시작 전인 수업(${soon.map(a=>esc(a.name)).join(', ')})은 시작일부터 시간표에 나와요.</p>`;
-  return h;
+  return h+hiddenBox;
 }
 
 /* ===== 결제 ===== */
@@ -552,6 +575,7 @@ const A={
   statPrev:()=>{ui.statAll=false;ui.statYm=shiftYm(ui.statYm,-1);render()}, statNext:()=>{ui.statAll=false;ui.statYm=shiftYm(ui.statYm,1);render()},
   statMode:d=>{ui.statAll=d.v==='all';render()},
   payFilter:d=>{ui.payFilter=d.v;render()},
+  weekSoon:d=>{ui.weekSoon=d.v==='1';render()},
   newAc:()=>sheetAc(''), editAc:d=>sheetAc(d.id),
   newPay:()=>sheetPay(''), editPay:d=>sheetPay(d.id),
   newCard:()=>sheetCard(''), editCard:d=>sheetCard(d.id),
@@ -629,6 +653,16 @@ $('restore').addEventListener('change',async e=>{
   catch{toast('올바른 백업 파일이 아니에요')}
   e.target.value='';
 });
+(function fixData(){
+  let changed=false;
+  db.academies.forEach(a=>{
+    const days=dayList(a).join(','),st=normTime(a.start),en=normTime(a.end);
+    if(days&&days!==a.days){a.days=days;changed=true}
+    if(st&&st!==a.start){a.start=st;changed=true}
+    if(en&&en!==a.end){a.end=en;changed=true}
+  });
+  if(changed) writeLS(KEY,JSON.stringify(db));
+})();
 render();
 </script>
 </body>

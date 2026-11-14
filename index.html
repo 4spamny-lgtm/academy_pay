@@ -108,6 +108,9 @@ main{padding:0 14px}
 .blk b{display:block;font-weight:800;word-break:keep-all}
 .blk span{display:block;color:var(--muted);font-size:10.5px}
 .blk span.tch{color:var(--text);font-weight:600;word-break:keep-all}
+.blk.multi{display:flex;flex-direction:column;gap:2px;padding:2px;background:var(--surface);border:1px solid var(--line);border-left:1px solid var(--line)}
+.blk.multi .mi{flex:1;min-height:0;overflow:hidden;border-radius:4px;padding:2px 3px;background:color-mix(in srgb,var(--c) 24%,var(--surface));border-left:3px solid var(--c)}
+.blk.multi .mi span{display:block}
 .dl{padding:14px 16px;border-top:1px solid var(--line);display:flex;gap:14px}
 .dl:first-child{border-top:0}
 .dl>b{width:24px;flex:none;font-weight:800;font-size:17px}
@@ -376,11 +379,16 @@ function vWeek(){
   time+='</div>';
   let cols='';
   for(let d=0;d<7;d++){
-    const its=items.filter(i=>i.day===d).sort((x,y)=>x.s-y.s),lanes=[];
-    its.forEach(i=>{let l=lanes.findIndex(end=>end<=i.s);if(l<0){l=lanes.length;lanes.push(0)}lanes[l]=i.e;i.lane=l});
-    const n=Math.max(1,lanes.length);
-    cols+=`<div class="tt-col ${d===ti?'today':''}" style="height:${height}px;--h:${H}px">`+its.map(i=>
-      `<button class="blk" data-act="editAc" data-id="${i.a.id}" style="--c:${acColor(i.a)};top:${(i.s-minH*60)/60*H+1}px;height:${(i.e-i.s)/60*H-2}px;left:${i.lane/n*100}%;width:calc(${100/n}% - 1px)"><b>${esc(i.a.subject||i.a.name)}</b>${i.a.teacher?`<span class="tch">${esc(i.a.teacher)}</span>`:''}<span>${i.a.start}</span></button>`).join('')+'</div>';
+    const its=items.filter(i=>i.day===d).sort((x,y)=>x.s-y.s||x.e-y.e);
+    /* 시간이 겹치는 수업끼리 묶기 */
+    const groups=[];
+    its.forEach(i=>{const g=groups.at(-1);if(g&&i.s<g.e){g.list.push(i);g.e=Math.max(g.e,i.e)}else groups.push({s:i.s,e:i.e,list:[i]})});
+    cols+=`<div class="tt-col ${d===ti?'today':''}" style="height:${height}px;--h:${H}px">`+groups.map(g=>{
+      const pos=`top:${(g.s-minH*60)/60*H+1}px;height:${(g.e-g.s)/60*H-2}px`;
+      if(g.list.length===1){const i=g.list[0];
+        return `<button class="blk" data-act="editAc" data-id="${i.a.id}" style="--c:${acColor(i.a)};${pos};left:0;right:0"><b>${esc(i.a.subject||i.a.name)}</b>${i.a.teacher?`<span class="tch">${esc(i.a.teacher)}</span>`:''}<span>${i.a.start}</span></button>`;}
+      return `<button class="blk multi" data-act="pickAc" data-ids="${g.list.map(i=>i.a.id).join(',')}" style="${pos};left:0;right:0">${g.list.map(i=>`<div class="mi" style="--c:${acColor(i.a)}"><b>${esc(i.a.subject||i.a.name)}</b>${i.a.teacher?`<span class="tch">${esc(i.a.teacher)}</span>`:''}</div>`).join('')}</button>`;
+    }).join('')+'</div>';
   }
   let h=toggle+`<div class="tt"><div class="tt-head"><div></div>${DAYS.map((d,i)=>`<div class="${i===ti?'today':''}">${d}</div>`).join('')}</div><div class="tt-body">${time}${cols}</div></div>`;
   h+=`<div class="sec">요일별 일정</div><div class="box">`;
@@ -514,7 +522,7 @@ function sheetAc(id){
   const a=db.academies.find(x=>x.id===id)||{name:'',subject:'',teacher:'',days:'',start:'16:00',end:'17:00',fee:'',note:'',startDate:today(),endDate:''};
   const ds=dayList(a);
   openSheet(`<h2>${id?'수업 정보':'수업 등록'}${X}</h2>
-    ${fld('학원 이름',`<input id="f_name" value="${esc(a.name)}" placeholder="예: 해봄수학학원">`)}
+    ${fld('학원 이름',`<input id="f_name" value="${esc(a.name)}">`)}
     <div class="two">${fld('과목',`<input id="f_subject" value="${esc(a.subject)}" placeholder="예: 수학">`)}${fld('선생님',`<input id="f_teacher" value="${esc(a.teacher)}" placeholder="선택">`)}</div>
     ${fld('수업 요일',`<div class="days">${DAYS.map(d=>`<button type="button" data-act="toggleDay" class="${ds.includes(d)?'on':''}" data-d="${d}">${d}</button>`).join('')}</div>`)}
     <div class="two">${fld('시작 시간',timePick('t_start',a.start||'16:00'))}${fld('끝나는 시간',timePick('t_end',a.end||'17:00'))}</div>
@@ -575,6 +583,10 @@ function download(name,content,type){const a=document.createElement('a'),u=URL.c
 const A={
   tab:d=>{ui.tab=d.t;render();window.scrollTo(0,0)},
   addMenu:sheetAdd, close:closeSheet,
+  pickAc:d=>{
+    const list=d.ids.split(',').map(id=>db.academies.find(a=>a.id===id)).filter(Boolean);
+    openSheet(`<h2>같은 시간 수업 ${list.length}개${X}</h2><div class="box">${list.map(a=>`<button class="row" style="width:100%" data-act="editAc" data-id="${a.id}"><span class="dot" style="--c:${acColor(a)}"></span><span class="grow">${esc(a.name)}<small style="display:block;font-weight:500;color:var(--muted);font-size:14px">${esc(a.subject)}${a.teacher?' / '+esc(a.teacher)+' 선생님':''} / ${a.start}~${a.end}</small></span><span style="color:var(--faint)">›</span></button>`).join('')}</div>`);
+  },
   editTitle:()=>{
     openSheet(`<h2>앱 이름 바꾸기${X}</h2>
       ${fld('홈 화면 맨 위에 보일 이름',`<input id="f_title" value="${esc(appTitle())}" maxlength="20" placeholder="예: 서연이 학원">`)}

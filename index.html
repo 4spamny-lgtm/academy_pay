@@ -162,10 +162,10 @@ main{padding:0 14px}
 .f textarea{min-height:68px;resize:vertical}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .days{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
-.palette{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;max-width:290px}
-.palette button{aspect-ratio:1;border-radius:50%;background:var(--c);border:3px solid var(--surface);box-shadow:0 0 0 1px var(--line);position:relative}
-.palette button.on{box-shadow:0 0 0 2.5px var(--text)}
-.palette button.on::after{content:'';position:absolute;left:50%;top:46%;width:7px;height:13px;border:solid #fff;border-width:0 3px 3px 0;transform:translate(-50%,-50%) rotate(45deg)}
+.palette{display:grid;grid-template-columns:repeat(10,1fr);gap:6px;max-width:340px}
+.palette button{aspect-ratio:1;border-radius:50%;background:var(--c);border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);position:relative;max-width:28px}
+.palette button.on{box-shadow:0 0 0 2px var(--text)}
+.palette button.on::after{content:'';position:absolute;left:50%;top:45%;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:translate(-50%,-50%) rotate(45deg)}
 [id^="cat-"]{scroll-margin-top:84px}
 .gh{display:flex;justify-content:space-between;align-items:baseline;padding:13px 16px 11px;background:var(--surface2);border-bottom:1px solid var(--line)}
 .gh b{font-size:16px;font-weight:800}

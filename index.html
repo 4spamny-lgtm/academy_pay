@@ -24,7 +24,9 @@ button{background:none;border:0;cursor:pointer;text-align:inherit}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #app{max-width:600px;margin:0 auto;min-height:100vh;padding-bottom:100px}
 .top{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:18px 18px 12px;background:var(--bg)}
-.top h1{font-size:24px;font-weight:800;letter-spacing:-0.03em}
+.top h1{font-size:24px;font-weight:800;letter-spacing:-0.03em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:10px}
+.top h1.editable{cursor:pointer;display:flex;align-items:center;gap:6px}
+.top h1 svg{width:17px;height:17px;flex:none;fill:none;stroke:var(--faint);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .add{height:42px;padding:0 16px;border-radius:21px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:15px}
 main{padding:0 14px}
 .tabs{position:fixed;bottom:0;left:0;right:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
@@ -104,7 +106,8 @@ main{padding:0 14px}
 .tt-col.today{background-color:var(--soft)}
 .blk{position:absolute;border-radius:6px;padding:3px 4px;overflow:hidden;background:color-mix(in srgb,var(--c) 24%,var(--surface));border-left:3px solid var(--c);font-size:11.5px;line-height:1.25;text-align:left}
 .blk b{display:block;font-weight:800;word-break:keep-all}
-.blk span{color:var(--muted);font-size:10.5px}
+.blk span{display:block;color:var(--muted);font-size:10.5px}
+.blk span.tch{color:var(--text);font-weight:600;word-break:keep-all}
 .dl{padding:14px 16px;border-top:1px solid var(--line);display:flex;gap:14px}
 .dl:first-child{border-top:0}
 .dl>b{width:24px;flex:none;font-weight:800;font-size:17px}
@@ -182,7 +185,7 @@ main{padding:0 14px}
 </head>
 <body>
 <div id="app">
-  <header class="top"><h1 id="title">우리 아이 학원</h1><button class="add" data-act="addMenu">+ 추가</button></header>
+  <header class="top"><h1 id="title" data-act="editTitle">우리 아이 학원</h1><button class="add" data-act="addMenu">+ 추가</button></header>
   <main id="view"></main>
 </div>
 <nav class="tabs"><div class="in">
@@ -377,7 +380,7 @@ function vWeek(){
     its.forEach(i=>{let l=lanes.findIndex(end=>end<=i.s);if(l<0){l=lanes.length;lanes.push(0)}lanes[l]=i.e;i.lane=l});
     const n=Math.max(1,lanes.length);
     cols+=`<div class="tt-col ${d===ti?'today':''}" style="height:${height}px;--h:${H}px">`+its.map(i=>
-      `<button class="blk" data-act="editAc" data-id="${i.a.id}" style="--c:${acColor(i.a)};top:${(i.s-minH*60)/60*H+1}px;height:${(i.e-i.s)/60*H-2}px;left:${i.lane/n*100}%;width:calc(${100/n}% - 1px)"><b>${esc(i.a.subject||i.a.name)}</b><span>${i.a.start}</span></button>`).join('')+'</div>';
+      `<button class="blk" data-act="editAc" data-id="${i.a.id}" style="--c:${acColor(i.a)};top:${(i.s-minH*60)/60*H+1}px;height:${(i.e-i.s)/60*H-2}px;left:${i.lane/n*100}%;width:calc(${100/n}% - 1px)"><b>${esc(i.a.subject||i.a.name)}</b>${i.a.teacher?`<span class="tch">${esc(i.a.teacher)}</span>`:''}<span>${i.a.start}</span></button>`).join('')+'</div>';
   }
   let h=toggle+`<div class="tt"><div class="tt-head"><div></div>${DAYS.map((d,i)=>`<div class="${i===ti?'today':''}">${d}</div>`).join('')}</div><div class="tt-body">${time}${cols}</div></div>`;
   h+=`<div class="sec">요일별 일정</div><div class="box">`;
@@ -462,9 +465,13 @@ function vMore(){
 }
 
 /* ===== 렌더 ===== */
-const TITLES={home:'우리 아이 학원',week:'주간 시간표',pay:'결제',cards:'카드',more:'더보기'};
+const appTitle=()=>(db.title||'').trim()||'우리 아이 학원';
+const TITLES={home:'',week:'주간 시간표',pay:'결제',cards:'카드',more:'더보기'};
 function render(){
-  $('title').textContent=TITLES[ui.tab];
+  const t=$('title'),isHome=ui.tab==='home';
+  t.innerHTML=isHome?esc(appTitle())+'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>':TITLES[ui.tab];
+  t.classList.toggle('editable',isHome);t.dataset.act=isHome?'editTitle':'';
+  document.title=appTitle();
   document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===ui.tab));
   $('view').innerHTML={home:vHome,week:vWeek,pay:vPay,cards:vCards,more:vMore}[ui.tab]();
 }
@@ -568,6 +575,14 @@ function download(name,content,type){const a=document.createElement('a'),u=URL.c
 const A={
   tab:d=>{ui.tab=d.t;render();window.scrollTo(0,0)},
   addMenu:sheetAdd, close:closeSheet,
+  editTitle:()=>{
+    openSheet(`<h2>앱 이름 바꾸기${X}</h2>
+      ${fld('홈 화면 맨 위에 보일 이름',`<input id="f_title" value="${esc(appTitle())}" maxlength="20" placeholder="예: 서연이 학원">`)}
+      <div class="btns"><button class="danger" data-act="resetTitle">기본 이름</button><button class="primary" data-act="saveTitle">저장</button></div>`);
+    setTimeout(()=>{const i=$('f_title');i.focus();i.select()},50);
+  },
+  saveTitle:()=>{db.title=$('f_title').value.trim();commit('이름을 바꿨어요')},
+  resetTitle:()=>{db.title='';commit('기본 이름으로 바꿨어요')},
   guide:sheetGuide,
   closeGuide:()=>{writeLS(GUIDE_KEY,'1');closeSheet();render()},
   hideGuide:()=>{writeLS(GUIDE_KEY,'1');render()},
@@ -631,7 +646,7 @@ const A={
   },
   restoreClick:()=>$('restore').click(),
   clearSample:()=>{for(const k of ['cards','academies','payments'])db[k]=db[k].filter(x=>!String(x.id).startsWith('sample-'));save();toast('예시 데이터를 지웠어요')},
-  resetAll:()=>{db={academies:[],payments:[],cards:[]};save();toast('모두 지웠어요')}
+  resetAll:()=>{db={title:db.title||'',academies:[],payments:[],cards:[]};save();toast('모두 지웠어요')}
 };
 document.addEventListener('click',ev=>{
   const el=ev.target.closest('[data-act]');
